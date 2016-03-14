@@ -3,7 +3,8 @@
 
 #include <sys/types.h>
 #include <netinet/in.h>
-#include <arpa/nameser.h>
+#include <arpa/nameser.h> /** added by zhuqiang for nameserver **/
+#include <arpa/inet.h> /** added by zhuqiang for nameserver **/
 #include <resolv.h>
 
 #include "acconfig.h"
@@ -17,18 +18,21 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-class RGWDNSResolver {
-  list<res_state> states;
-  Mutex lock;
+class RGWDNSResolver
+{
+    list<res_state> states;
+    Mutex lock;
+	CephContext *cct;/** added by zhuqiang for nameserver **/
 
   int get_state(res_state *ps);
   void put_state(res_state s);
 
 
 public:
-  ~RGWDNSResolver();
-  RGWDNSResolver() : lock("RGWDNSResolver") {}
-  int resolve_cname(const string& hostname, string& cname, bool *found);
+    ~RGWDNSResolver();
+	/** modified by zhuqiang for nameserver **/
+    RGWDNSResolver(CephContext *cct) : lock("RGWDNSResolver"),cct(cct) {}
+    int resolve_cname(const string& hostname, string& cname, bool *found);
 };
 
 RGWDNSResolver::~RGWDNSResolver()
@@ -43,24 +47,53 @@ RGWDNSResolver::~RGWDNSResolver()
 
 int RGWDNSResolver::get_state(res_state *ps)
 {
-  lock.Lock();
-  if (!states.empty()) {
-    res_state s = states.front();
-    states.pop_front();
+    lock.Lock();
+    if (!states.empty())
+    {
+        res_state s = states.front();
+        states.pop_front();
+        lock.Unlock();
+        *ps = s;
+        return 0;
+    }
     lock.Unlock();
+    struct __res_state *s = new struct __res_state;
+    s->options = 0;
+    if (res_ninit(s) < 0)
+    {
+        delete s;
+        dout(0) << "ERROR: failed to call res_ninit()" << dendl;
+        return -EINVAL;
+    }
+	
+    /** code start : 
+    * from conf get namesever ip£¬default port(53) 
+    */
+	s->nsaddr_list[0].sin_addr.s_addr = inet_addr(cct->_conf->rgw_resolve_nameserver.c_str());
+    s->nscount=1;
+	if (cct->_conf->rgw_resolve_nameserver_1.length())
+	{
+        s->nsaddr_list[1].sin_addr.s_addr = inet_addr(cct->_conf->rgw_resolve_nameserver_1.c_str());
+		s->nscount += 1;
+	}
+    else
+    {
+        bzero(&s->nsaddr_list[1],sizeof(struct sockaddr_in));
+    }
+
+	if (cct->_conf->rgw_resolve_nameserver_2.length())
+	{
+        s->nsaddr_list[2].sin_addr.s_addr = inet_addr(cct->_conf->rgw_resolve_nameserver_2.c_str());
+		s->nscount += 1;
+	}
+    else
+    {
+        bzero(&s->nsaddr_list[2],sizeof(struct sockaddr_in));
+    }    
+	/** code end **/
+	
     *ps = s;
     return 0;
-  }
-  lock.Unlock();
-  struct __res_state *s = new struct __res_state;
-  s->options = 0;
-  if (res_ninit(s) < 0) {
-    delete s;
-    dout(0) << "ERROR: failed to call res_ninit()" << dendl;
-    return -EINVAL;
-  }
-  *ps = s;
-  return 0;
 }
 
 void RGWDNSResolver::put_state(res_state s)
@@ -164,8 +197,9 @@ done:
 RGWResolver::~RGWResolver() {
   delete resolver;
 }
-RGWResolver::RGWResolver() {
-  resolver = new RGWDNSResolver;
+RGWResolver::RGWResolver(CephContext *cct)
+{
+    resolver = new RGWDNSResolver(cct);
 }
 
 int RGWResolver::resolve_cname(const string& hostname, string& cname, bool *found) {
@@ -175,9 +209,9 @@ int RGWResolver::resolve_cname(const string& hostname, string& cname, bool *foun
 RGWResolver *rgw_resolver;
 
 
-void rgw_init_resolver()
+void rgw_init_resolver(CephContext *cct)
 {
-  rgw_resolver = new RGWResolver();
+    rgw_resolver = new RGWResolver(cct);/** modified by zhuqiang for nameserver **/
 }
 
 void rgw_shutdown_resolver()

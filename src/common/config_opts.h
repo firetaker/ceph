@@ -835,6 +835,9 @@ OPTION(rgw_socket_path, OPT_STR, "")   // path to unix domain socket, if not spe
 OPTION(rgw_host, OPT_STR, "")  // host for radosgw, can be an IP, default is 0.0.0.0
 OPTION(rgw_port, OPT_STR, "")  // port to listen, format as "8080" "5000", if not specified, rgw will not run external fcgi
 OPTION(rgw_dns_name, OPT_STR, "")
+OPTION(rgw_resolve_nameserver, OPT_STR, "127.0.0.1")// nameserver ip for CNAME query added by zhuqiang
+OPTION(rgw_resolve_nameserver_1, OPT_STR, "")// nameserver ip for CNAME query added by zhuqiang
+OPTION(rgw_resolve_nameserver_2, OPT_STR, "")// nameserver ip for CNAME query added by zhuqiang
 OPTION(rgw_script_uri, OPT_STR, "") // alternative value for SCRIPT_URI if not set in request
 OPTION(rgw_request_uri, OPT_STR,  "") // alternative value for REQUEST_URI if not set in request
 OPTION(rgw_swift_url, OPT_STR, "")             // the swift url, being published by the internal swift auth
